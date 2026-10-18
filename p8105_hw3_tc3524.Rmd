@@ -1,0 +1,236 @@
+---
+title: "p8105_hw3_tc3524"
+author: "Hubert Chang"
+date: "2026-10-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggridges)
+```
+
+#P roblem 1
+
+```{r}
+library(p8105.datasets)
+data("ny_noaa")
+```
+
+## Summary
+```{r}
+skimr::skim(ny_noaa)
+
+ny_noaa |>
+  summarise(across(everything(),
+                   ~mean(is.na(.x)))) |>
+  
+  pivot_longer(
+    everything(),
+    names_to = "variable",
+    values_to = "props"
+  )
+
+```
+
+# Cleaning Data
+```{r}
+clean_noaa = 
+  ny_noaa |>
+  separate(date, into = c("year", "month", "day"), remove = FALSE) |>
+  
+  mutate(
+    year = as.integer(year),
+    month = as.integer(month),
+    day = as.integer(day),
+    tmax = as.numeric(tmax) / 10,
+    tmin = as.numeric(tmin) / 10,
+    prcp = prcp / 10
+    )
+```
+
+# Most common value
+```{r}
+clean_noaa |>
+count(snow, sort = TRUE) |>
+head()
+```
+
+The most commonly observed value for snowfall is 0, this is because most of the year there would not be any snow since this is data of New York. 
+
+#Cleaning data2
+
+```{r}
+clean_noaa2 =
+  clean_noaa |>
+  filter(month %in% c(1,7)) |>
+  mutate(
+    month = factor(month, levels = c(1,7)),
+    ) |>
+  group_by(id, month, year) |>
+  summarize(mean_tmax = mean(tmax, na.rm = TRUE),
+            )|>
+  filter(!is.nan(mean_tmax))
+```
+```{r}
+clean_noaa2 |>
+  ggplot(aes(x = year, y = mean_tmax)) +
+  geom_point(aes(color = "peachpuff"), alpha = 0.5, size = 0.8) +
+  facet_grid(. ~ month)
+  labs(
+    Title = "Average max temperature by station, Jan vs July",
+    x = "Years",
+    y = "Mean Max Temp"
+  )
+```
+
+
+We could see that in Janaury it is colder than it is in July. This make sense because January is still in Winter so the temperature would be lower. There is more of a range of temperature in January vs July. There is 2 outliers in Janaury over the years, one in around 1982 at negative 14 degrees and one at 2005 at around negative 12 degrees. There is one outlier for July in 1988 at only 14 degrees. 
+
+
+```{r}
+noaa_maxmin = 
+  clean_noaa |>
+  drop_na(tmax,tmin) |>
+  ggplot(aes(x = tmin, y = tmax)) +
+  geom_hex() +
+  labs (
+    Title = "Tmax vs Tmin",
+    x = "Minimum Temp",
+    y = "Maximum Temp",
+    fill = "Count"
+  ) +
+  viridis::scale_color_viridis(discrete = TRUE)
+
+noaa_maxmin
+```
+
+
+```{r}
+dist_snowfall = 
+  clean_noaa |>
+  filter ( snow > 0, snow < 100) |>
+  mutate(year = factor (year)) |>
+  ggplot(aes( x = snow, y = year)) +
+  geom_density_ridges(scale = 0.85)
+
+dist_snowfall
+```
+
+#Problem 2
+```{r}
+covar = 
+read_csv("data/nhanes_covar.csv", skip = 4) |>
+  janitor::clean_names()
+```
+
+```{r}
+accel = 
+  read_csv("data/nhanes_accel.csv") |>
+  janitor::clean_names()
+```
+
+```{r}
+anti_join(covar, accel, by = "seqn")
+anti_join(accel, covar, by = "seqn")
+```
+
+```{r}
+combined =
+  covar |>
+mutate(
+  sex = factor(sex, levels = c(1, 2), labels = c("male", "female")),
+  education = factor (education, levels = c(1, 2, 3), 
+                      labels = c("less than high school", "high school equivalent", "more than high school"),
+                      ordered = TRUE
+                      )
+      ) |>
+filter(age >= 21) |>
+drop_na(sex, age, bmi, education) |>
+inner_join(accel, by = "seqn") |>
+mutate(seqn = as.character(seqn)) 
+```
+
+```{r}
+combined |>
+  count(education, sex) |>
+  pivot_wider(names_from = sex, values_from = n, values_fill = 0) |>
+  mutate(total = male + female) |>
+  rename(men = male, women = female) 
+```
+
+It is about equivalent in both male and female for less than high school education. There are more men in high school equivalent education than women. In more than high school there are the most people in that category but has about the same amount of people across strata of sex.
+
+
+```{r}
+combined |>
+  ggplot(aes(x = education, y = age, fill = sex)) +
+  geom_boxplot(alpha = 0.5) +
+  labs(
+    title = "age distribution by sex and education",
+    x = "Education",
+    y = "Age",
+    fill = "Sex"
+  )
+```
+
+The range for less than high school education are about the same across sex, the median is also about the same across sex strata. In high school equivalent there is a little more variance in range as male have a lower range than female. the median for male is also lower than female by about 10 years old. Lastly, more than high school education have more young people. The age range and median are about the same in this category.
+
+
+```{r}
+combined =
+  combined |>
+  mutate (total_activity = rowSums(across(starts_with("min")), na.rm = TRUE))
+
+combined |>
+  ggplot(aes (x = age, y = total_activity, color = sex)) +
+  geom_point(alpha = 0.5) +
+  facet_grid(~education) +
+  labs(
+    title = "Total Activity vs. Age, by sex/education",
+    x = "age",
+    y = "Total Activity",
+    color = "sex"
+    
+  )
+```
+
+Across the education grids, we can see that as age increases, total activity decreases in both male and female. In both high school equivalent and more than high school education, there are more of a spread in activity vs. age. However, in less than high school education, there is more of an obvious negative slope.
+
+```{r}
+combined2 = 
+  combined |>
+  pivot_longer( 
+    starts_with ("min"),
+    names_to = "minute",
+    names_prefix = "min",
+    values_to = "mims"
+              ) |>
+  mutate(
+    minute = as.integer(minute),
+    hour = minute / 60
+        )
+
+combined2 |>
+  ggplot(aes( x = hour, y = mims, color = sex)) +
+  geom_smooth(aes(group = sex), se = FALSE) +
+  facet_grid(~ education)
+  labs(
+    title = "24 hour activity by education and sex",
+    x = "hour of day",
+    y = "MIMS",
+    color = "sex"
+  )
+```
+The MIMs are at its lowest across the strata of education around hour 4 (4am), and it is at highest around hour 12 across the three educations. There is another peak other than hour 12 in more than high school education at hour 18.
+
+#Problem 3
+
+```{r}
+Citibike = 
+read_csv("data/citibike/")
+```
+
+
+

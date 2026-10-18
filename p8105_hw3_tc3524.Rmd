@@ -227,10 +227,7 @@ The MIMs are at its lowest across the strata of education around hour 4 (4am), a
 
 #Problem 3
 
-```{r}
-Citibike = 
-read_csv("data/citibike/")
-```
+
 
 
 
